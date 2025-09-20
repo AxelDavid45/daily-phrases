@@ -1,5 +1,11 @@
 FROM python:3.11-slim
 
+# Build argument for rotation frequency
+ARG ROTATIONS_PER_DAY=2
+
+# Set environment variable from build arg
+ENV ROTATIONS_PER_DAY=${ROTATIONS_PER_DAY}
+
 WORKDIR /app
 
 COPY requirements.txt .

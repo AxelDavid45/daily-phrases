@@ -3,7 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from feedgen.feed import FeedGenerator
 from datetime import datetime, timezone
 import hashlib
+import os
 from pathlib import Path
+
+# Get rotation frequency from environment variable (set during build)
+ROTATIONS_PER_DAY = int(os.getenv('ROTATIONS_PER_DAY', '2'))  # Default: 2 (every 12 hours)
 
 app = FastAPI(title="Daily Phrase API", version="1.0.0")
 
@@ -22,6 +26,16 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+@app.get("/stats")
+async def get_stats():
+    hours_per_rotation = 24 / ROTATIONS_PER_DAY
+    return {
+        "rotations_per_day": ROTATIONS_PER_DAY,
+        "hours_per_rotation": hours_per_rotation,
+        "language": "Spanish",
+        "format_support": ["'phrase' - author", "phrase | author", "phrase only"]
+    }
 
 def load_phrases():
     """Load phrases from file with format: 'phrase | author'"""
@@ -82,8 +96,10 @@ def get_daily_phrase():
     phrases = load_phrases()
     now = datetime.now()
     
-    # Create 12-hour intervals: 00:00-11:59 (period 0) and 12:00-23:59 (period 1)
-    period = 0 if now.hour < 12 else 1
+    # Calculate period based on configurable rotations per day
+    hours_per_period = 24 / ROTATIONS_PER_DAY
+    period = int(now.hour / hours_per_period)
+    
     date_str = now.strftime("%Y-%m-%d")
     hash_input = f"{date_str}-{period}"
     
