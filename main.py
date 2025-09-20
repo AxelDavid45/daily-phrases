@@ -40,18 +40,39 @@ def load_phrases():
         with open(phrases_file, 'r', encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
-                if line and '|' in line:
-                    phrase_text, author = line.split('|', 1)
-                    phrases.append({
-                        "phrase": phrase_text.strip(),
-                        "author": author.strip()
-                    })
-                elif line:
-                    # Fallback for lines without author
-                    phrases.append({
-                        "phrase": line.strip(),
-                        "author": "Anónimo"
-                    })
+                if line:
+                    # Support multiple formats: "phrase" - author, phrase | author, or just phrase
+                    if '" - ' in line and line.startswith('"'):
+                        # Format: "phrase" - author
+                        quote_end = line.rfind('" - ')
+                        if quote_end > 0:
+                            phrase_text = line[1:quote_end]  # Remove opening quote
+                            author = line[quote_end + 4:].strip()
+                            # Remove any trailing emojis or special characters from author
+                            author = author.split(' ⚔️')[0].split(' 🏛️')[0].split(' 📚')[0]
+                            phrases.append({
+                                "phrase": phrase_text,
+                                "author": author
+                            })
+                        else:
+                            # Fallback if parsing fails
+                            phrases.append({
+                                "phrase": line.strip(),
+                                "author": "Anónimo"
+                            })
+                    elif '|' in line:
+                        # Old format: phrase | author
+                        phrase_text, author = line.split('|', 1)
+                        phrases.append({
+                            "phrase": phrase_text.strip(),
+                            "author": author.strip()
+                        })
+                    else:
+                        # Just phrase without author
+                        phrases.append({
+                            "phrase": line.strip(),
+                            "author": "Anónimo"
+                        })
         return phrases if phrases else [{"phrase": "No se encontraron frases.", "author": "Sistema"}]
     except Exception:
         # Fallback if file can't be read
