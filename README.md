@@ -1,4 +1,4 @@
-# Daily Phrase API
+# Daily Phrase API (vibe coded)
 
 A lightweight FastAPI service that provides daily inspirational phrases via REST API and RSS feed.
 
