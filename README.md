@@ -1,4 +1,4 @@
-# Daily Phrase API
+# Daily Phrase API (VibeCoded)
 
 A lightweight FastAPI service that provides daily inspirational phrases in Spanish via REST API and RSS feed.
 
@@ -173,3 +173,7 @@ Usage examples:
 - RSS Feed: `http://localhost:8000/rss`
 - JSON API: `http://localhost:8000/api/phrase`
 - Health: `http://localhost:8000/health`
+
+# Notes
+
+This project was made as a proof of concept using claudecode.
