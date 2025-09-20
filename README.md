@@ -6,7 +6,7 @@ A lightweight FastAPI service that provides daily inspirational phrases in Spani
 
 - 🇪🇸 **Spanish phrases** with author attribution
 - ⏰ **12-hour rotation** (00:00-11:59 and 12:00-23:59)
-- 📚 **1M+ phrases** loaded from text file
+- 📚 **1M+ phrases** stored in SQLite database
 - 📡 **RSS feed** with standards compliance
 - 🐋 **Dockerized** for easy deployment
 - 🔄 **Updatable** by simply replacing `phrases.txt`
@@ -90,12 +90,56 @@ docker build --build-arg ROTATIONS_PER_DAY=1 -t daily-phrase-api .
 
 # 24 rotations (every hour)
 docker build --build-arg ROTATIONS_PER_DAY=24 -t daily-phrase-api .
+
+# 1440 rotations (every minute - for testing)
+docker build --build-arg ROTATIONS_PER_DAY=1440 -t daily-phrase-api .
 ```
 
-**How it works:**
-- **Deterministic**: Same phrase during each period
-- **Hash-based**: Uses date + period for consistent selection
-- **Configurable**: Set `ROTATIONS_PER_DAY` from 1 to 24
+## 🧮 How the Algorithm Works
+
+The phrase selection uses **deterministic randomness** to ensure the same phrase appears globally at the same time:
+
+### Step-by-Step Process
+
+1. **Time Period Calculation**
+   ```python
+   # Example: ROTATIONS_PER_DAY = 1440 (every minute)
+   minutes_per_period = (24 * 60) / 1440 = 1.0 minute per period
+   
+   # At 20:08 → current_minute_of_day = 20*60 + 8 = 1208
+   period = int(1208 / 1.0) = 1208
+   ```
+
+2. **Hash Input Creation**
+   ```python
+   # Combines date + period for uniqueness
+   hash_input = "2025-09-20-1208"
+   ```
+
+3. **Deterministic Index Generation**
+   ```python
+   # MD5 hash → large number → modulo to fit phrase count
+   phrase_index = int(hashlib.md5(hash_input.encode()).hexdigest(), 16) % total_phrases
+   ```
+
+### Common Rotation Values
+
+| `ROTATIONS_PER_DAY` | Minutes per Period | Description |
+|---------------------|-------------------|-------------|
+| `1` | 1440 minutes | Once per day |
+| `2` | 720 minutes | Every 12 hours |
+| `4` | 360 minutes | Every 6 hours |
+| `24` | 60 minutes | Every hour |
+| `1440` | 1 minute | Every minute (testing) |
+
+**Why 1440?** There are exactly **1440 minutes in a day** (24 × 60), so `ROTATIONS_PER_DAY=1440` means one rotation per minute.
+
+### Key Properties
+
+✅ **Global Sync**: Everyone gets the same phrase at the same time  
+✅ **No Coordination**: No shared state needed between instances  
+✅ **Even Distribution**: Hash function spreads selections across all phrases  
+✅ **Time-Based**: Automatically changes based on configured frequency
 
 ## 🐋 Production Deployment
 
@@ -121,11 +165,12 @@ ENV=production  # Execution mode
 
 ## 📊 Technical Specifications
 
-- **Image size**: ~214MB (optimized)
+- **Image size**: ~314MB (includes SQLite database)
 - **Base**: Python 3.11-slim
-- **Dependencies**: FastAPI, Uvicorn, FeedGen
-- **Capacity**: 1M+ phrases
-- **Memory**: Efficient on-demand loading
+- **Dependencies**: FastAPI, Uvicorn, FeedGen, SQLite
+- **Database**: 104MB SQLite with 1M+ phrases
+- **Performance**: ~0.013-0.021s response time
+- **Security**: Non-root user, health checks
 
 ## 🔧 Development
 
@@ -156,7 +201,7 @@ daily-phrase/
 Subscribe to the RSS feed in your favorite reader:
 
 ```
-http://your-domain.com/rss
+http://daily-phrase.ademapps.dev/rss
 ```
 
 The feed includes:

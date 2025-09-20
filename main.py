@@ -4,6 +4,7 @@ from feedgen.feed import FeedGenerator
 from datetime import datetime, timezone
 import hashlib
 import os
+import sqlite3
 from pathlib import Path
 
 # Get rotation frequency from environment variable (set during build)
@@ -29,82 +30,108 @@ async def health_check():
 
 @app.get("/stats")
 async def get_stats():
-    hours_per_rotation = 24 / ROTATIONS_PER_DAY
+    now = datetime.now()
+    minutes_per_period = (24 * 60) / ROTATIONS_PER_DAY
+    current_minute_of_day = now.hour * 60 + now.minute
+    period = int(current_minute_of_day / minutes_per_period)
+    date_str = now.strftime("%Y-%m-%d")
+    hash_input = f"{date_str}-{period}"
+    total_phrases = get_phrase_count()
+    
+    # Calculate next change time
+    next_period_minute = (period + 1) * minutes_per_period
+    next_change_hour = int(next_period_minute // 60)
+    next_change_minute = int(next_period_minute % 60)
+    
     return {
         "rotations_per_day": ROTATIONS_PER_DAY,
-        "hours_per_rotation": hours_per_rotation,
+        "minutes_per_rotation": minutes_per_period,
+        "total_phrases": total_phrases,
         "language": "Spanish",
-        "format_support": ["'phrase' - author", "phrase | author", "phrase only"]
+        "debug": {
+            "current_time": now.strftime("%H:%M:%S"),
+            "current_minute_of_day": current_minute_of_day,
+            "current_period": period,
+            "hash_input": hash_input,
+            "next_change_time": f"{next_change_hour:02d}:{next_change_minute:02d}"
+        }
     }
 
-def load_phrases():
-    """Load phrases from file with format: 'phrase | author'"""
-    phrases_file = Path(__file__).parent / "phrases.txt"
+def get_phrase_count():
+    """Get total number of phrases in database"""
+    db_path = Path(__file__).parent / "phrases.db"
     
-    if not phrases_file.exists():
-        # Fallback phrases if file doesn't exist
-        return [
-            {"phrase": "¡Hoy es un gran día para aprender algo nuevo!", "author": "Anónimo"},
-            {"phrase": "Cada momento es un nuevo comienzo.", "author": "Anónimo"},
-            {"phrase": "Cree que puedes y ya estás a la mitad del camino.", "author": "Anónimo"},
-        ]
+    if not db_path.exists():
+        return 3  # Fallback count
     
     try:
-        phrases = []
-        with open(phrases_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    # Support multiple formats: "phrase" - author, phrase | author, or just phrase
-                    if '" - ' in line and line.startswith('"'):
-                        # Format: "phrase" - author
-                        quote_end = line.rfind('" - ')
-                        if quote_end > 0:
-                            phrase_text = line[1:quote_end]  # Remove opening quote
-                            author = line[quote_end + 4:].strip()
-                            # Remove any trailing emojis or special characters from author
-                            author = author.split(' ⚔️')[0].split(' 🏛️')[0].split(' 📚')[0]
-                            phrases.append({
-                                "phrase": phrase_text,
-                                "author": author
-                            })
-                        else:
-                            # Fallback if parsing fails
-                            phrases.append({
-                                "phrase": line.strip(),
-                                "author": "Anónimo"
-                            })
-                    elif '|' in line:
-                        # Old format: phrase | author
-                        phrase_text, author = line.split('|', 1)
-                        phrases.append({
-                            "phrase": phrase_text.strip(),
-                            "author": author.strip()
-                        })
-                    else:
-                        # Just phrase without author
-                        phrases.append({
-                            "phrase": line.strip(),
-                            "author": "Anónimo"
-                        })
-        return phrases if phrases else [{"phrase": "No se encontraron frases.", "author": "Sistema"}]
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM phrases')
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count
     except Exception:
-        # Fallback if file can't be read
-        return [{"phrase": "Error al cargar frases. Intenta más tarde.", "author": "Sistema"}]
+        return 3  # Fallback count
+
+def get_phrase_by_index(index):
+    """Get a specific phrase by index from database"""
+    db_path = Path(__file__).parent / "phrases.db"
+    
+    # Fallback phrases if database doesn't exist
+    fallback_phrases = [
+        {"phrase": "¡Hoy es un gran día para aprender algo nuevo!", "author": "Anónimo"},
+        {"phrase": "Cada momento es un nuevo comienzo.", "author": "Anónimo"},
+        {"phrase": "Cree que puedes y ya estás a la mitad del camino.", "author": "Anónimo"},
+    ]
+    
+    if not db_path.exists():
+        return fallback_phrases[index % len(fallback_phrases)]
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Get phrase by ID (SQLite IDs start at 1)
+        cursor.execute('SELECT phrase, author FROM phrases WHERE id = ?', (index + 1,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            return {"phrase": result[0], "author": result[1]}
+        else:
+            # If index is out of range, fallback to modulo
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(*) FROM phrases')
+            total_count = cursor.fetchone()[0]
+            actual_index = (index % total_count) + 1
+            cursor.execute('SELECT phrase, author FROM phrases WHERE id = ?', (actual_index,))
+            result = cursor.fetchone()
+            conn.close()
+            return {"phrase": result[0], "author": result[1]} if result else fallback_phrases[0]
+            
+    except Exception:
+        # Fallback if database error
+        return fallback_phrases[index % len(fallback_phrases)]
 
 def get_daily_phrase():
-    phrases = load_phrases()
     now = datetime.now()
     
     # Calculate period based on configurable rotations per day
-    hours_per_period = 24 / ROTATIONS_PER_DAY
-    period = int(now.hour / hours_per_period)
+    # Use minutes for better precision with high-frequency rotations
+    minutes_per_period = (24 * 60) / ROTATIONS_PER_DAY
+    current_minute_of_day = now.hour * 60 + now.minute
+    period = int(current_minute_of_day / minutes_per_period)
     
     date_str = now.strftime("%Y-%m-%d")
     hash_input = f"{date_str}-{period}"
     
-    phrase_index = int(hashlib.md5(hash_input.encode()).hexdigest(), 16) % len(phrases)
-    return phrases[phrase_index]
+    # Get total phrase count and calculate index
+    total_phrases = get_phrase_count()
+    phrase_index = int(hashlib.md5(hash_input.encode()).hexdigest(), 16) % total_phrases
+    
+    # Get specific phrase by index
+    return get_phrase_by_index(phrase_index)
 
 @app.get("/api/phrase")
 async def get_phrase():
