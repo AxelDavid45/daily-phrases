@@ -5,11 +5,12 @@ A lightweight FastAPI service that provides daily inspirational phrases in Spani
 ## ✨ Features
 
 - 🇪🇸 **Spanish phrases** with author attribution
-- ⏰ **12-hour rotation** (00:00-11:59 and 12:00-23:59)
+- ⏰ **Configurable rotation** (default: every 12 hours)
 - 📚 **1M+ phrases** stored in SQLite database
 - 📡 **RSS feed** with standards compliance
 - 🐋 **Dockerized** for easy deployment
 - 🔄 **Updatable** by simply replacing `phrases.txt`
+- 🏗️ **Clean architecture** with separation of concerns
 
 ## 🚀 Quick Start
 
@@ -20,7 +21,10 @@ A lightweight FastAPI service that provides daily inspirational phrases in Spani
 pip install -r requirements.txt
 
 # Run the server
-python main.py
+uvicorn app.main:app --reload
+
+# Or using Python directly
+python -m app.main
 ```
 
 ### Docker (Recommended)
@@ -178,15 +182,50 @@ ENV=production  # Execution mode
 
 ```
 daily-phrase/
-├── main.py           # Main application
-├── phrases.txt       # Phrase database
-├── requirements.txt  # Python dependencies
-├── Dockerfile        # Docker configuration
+├── app/
+│   ├── __init__.py
+│   ├── main.py              # FastAPI application factory
+│   ├── config.py            # Configuration settings
+│   ├── dependencies.py      # Dependency injection
+│   ├── api/
+│   │   ├── __init__.py
+│   │   └── routes/
+│   │       ├── health.py    # Health & stats endpoints
+│   │       ├── phrases.py   # Phrase API endpoints
+│   │       └── rss.py       # RSS feed endpoint
+│   ├── models/
+│   │   ├── __init__.py
+│   │   └── schemas.py       # Pydantic models
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── phrase_service.py   # Business logic
+│   │   └── rss_service.py      # RSS generation
+│   └── repositories/
+│       ├── __init__.py
+│       └── phrase_repository.py # Data access layer
+├── tests/
+│   └── __init__.py
+├── main.py              # Legacy entry point (deprecated)
+├── phrases.txt          # Source phrase file
+├── phrases.db           # SQLite database
+├── migrate_to_sqlite.py # Database migration script
+├── requirements.txt     # Python dependencies
+├── Dockerfile           # Docker configuration
 ├── docker-compose.yml
 ├── .dockerignore
 ├── .gitignore
 └── README.md
 ```
+
+### Architecture
+
+The application follows a clean architecture pattern with clear separation of concerns:
+
+- **Routes**: Handle HTTP requests/responses and validation
+- **Services**: Contain business logic and orchestration
+- **Repositories**: Manage data access and persistence
+- **Models**: Define data structures and validation schemas
+- **Config**: Centralized configuration management
 
 ### Adding New Features
 
